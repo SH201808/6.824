@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 )
@@ -98,17 +99,25 @@ func Worker(mapf func(string, string) []KeyValue,
 // returns false if something goes wrong.
 func call(sockName string, rpcname string, args interface{}, reply interface{}) error {
 	// c, err := rpc.DialHTTP("tcp", "127.0.0.1"+":1234")
-
-	c, err := rpc.DialHTTP("tcp", sockName)
-	if err != nil {
-		log.Println(sockName, rpcname)
-		log.Fatal("dialing:", err)
+	retryCnt := 0
+	for {
+		c, err := rpc.DialHTTP("tcp", sockName)
+		if err != nil {
+			log.Println(sockName, rpcname)
+			if retryCnt == 3 {
+				return fmt.Errorf("retry more than")
+			}
+			if strings.HasSuffix(err.Error(), "connection reset by peer") || strings.HasSuffix(err.Error(), "connection refused") {
+				time.Sleep(2 * time.Second)
+				retryCnt++
+				continue
+			}
+			log.Fatal("dialing:", err)
+		}
+		err = c.Call(rpcname, args, reply)
+		c.Close()
+		return nil
 	}
-	defer c.Close()
-
-	err = c.Call(rpcname, args, reply)
-
-	return err
 }
 
 type MyWorker struct {
@@ -299,6 +308,7 @@ func (w *MyWorker) callGetMapResult(mapMyWorker *ReadFromMyWorker, wg *sync.Wait
 
 func (w *MyWorker) ReceiveWrongMyWorker() {
 	args := ReceiveWrongWorkerArgs{}
+	log.Println("receive")
 	w.mapMyWorkers[args.WrongHost].Host = args.NewHost
 }
 
@@ -344,6 +354,9 @@ func (w *MyWorker) GetMapResult(args *GetMapResultArgs, reply *GetMapResultReply
 	}
 	defer file.Close()
 	fileInfo, _ := file.Stat()
+	if int64(args.ReadOffSet) > fileInfo.Size() {
+		return nil
+	}
 
 	_, err = file.Seek(int64(args.ReadOffSet), 0)
 	if err != nil {

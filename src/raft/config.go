@@ -140,6 +140,12 @@ func (cfg *config) crash1(i int) {
 func (cfg *config) checkLogs(i int, m ApplyMsg) (string, bool) {
 	err_msg := ""
 	v := m.Command
+
+	log.Printf("command: %+v\n", m)
+	for j := 0; j < len(cfg.rafts); j++ {
+		log.Printf("index: %v, logs: %+v\n", j, cfg.logs[j])
+	}
+
 	for j := 0; j < len(cfg.logs); j++ {
 		if old, oldok := cfg.logs[j][m.CommandIndex]; oldok && old != v {
 			log.Printf("%v: log %v; server %v\n", i, cfg.logs[i], cfg.logs[j])

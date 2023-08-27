@@ -102,6 +102,7 @@ func (e *ClientEnd) Call(svcMeth string, args interface{}, reply interface{}) bo
 	case e.ch <- req:
 		// the request has been sent.
 	case <-e.done:
+		log.Println("done")
 		// entire Network has been destroyed.
 		return false
 	}

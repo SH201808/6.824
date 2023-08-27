@@ -8,7 +8,10 @@ package raft
 // test with the original before submitting.
 //
 
-import "testing"
+import (
+	"log"
+	"testing"
+)
 import "fmt"
 import "time"
 import "math/rand"
@@ -58,16 +61,19 @@ func TestReElection2A(t *testing.T) {
 	cfg.begin("Test (2A): election after network failure")
 
 	leader1 := cfg.checkOneLeader()
-
+	log.Printf("leader1: %v\n", leader1)
 	// if the leader disconnects, a new one should be elected.
 	cfg.disconnect(leader1)
-	cfg.checkOneLeader()
+	leader3 := cfg.checkOneLeader()
+	log.Printf("leader3: %v\n", leader3)
 
 	// if the old leader rejoins, that shouldn't
 	// disturb the new leader. and the old leader
 	// should switch to follower.
 	cfg.connect(leader1)
+	log.Println("connect")
 	leader2 := cfg.checkOneLeader()
+	log.Printf("leader2: %v\n", leader2)
 
 	// if there's no quorum, no new leader should
 	// be elected.
@@ -112,12 +118,13 @@ func TestManyElections2A(t *testing.T) {
 		// either the current leader should still be alive,
 		// or the remaining four should elect a new one.
 		cfg.checkOneLeader()
+		log.Printf("check")
 
 		cfg.connect(i1)
 		cfg.connect(i2)
 		cfg.connect(i3)
 	}
-
+	log.Printf("check end")
 	cfg.checkOneLeader()
 
 	cfg.end()
@@ -166,12 +173,16 @@ func TestRPCBytes2B(t *testing.T) {
 		if xindex != index {
 			t.Fatalf("got index %v but expected %v", xindex, index)
 		}
+		actualBytes := cfg.bytesTotal()
+		actualSend := actualBytes - bytes0
+		log.Printf("send: %v, actualSend: %v\n", len(cmd), actualSend)
 		sent += int64(len(cmd))
 	}
 
 	bytes1 := cfg.bytesTotal()
 	got := bytes1 - bytes0
 	expected := int64(servers) * sent
+	log.Printf("bytes1: %v, bytes0: %v, sent: %v\n", bytes1, bytes0, sent)
 	if got > expected+50000 {
 		t.Fatalf("too many RPC bytes; got %v, expected %v", got, expected)
 	}
@@ -191,6 +202,7 @@ func TestFollowerFailure2B(t *testing.T) {
 
 	// disconnect one follower from the network.
 	leader1 := cfg.checkOneLeader()
+	log.Printf("leader1: %v\n", leader1)
 	cfg.disconnect((leader1 + 1) % servers)
 
 	// the leader and remaining follower should be
@@ -201,6 +213,7 @@ func TestFollowerFailure2B(t *testing.T) {
 
 	// disconnect the remaining follower
 	leader2 := cfg.checkOneLeader()
+	log.Printf("disconnectAll, leader2: %v\n", leader2)
 	cfg.disconnect((leader2 + 1) % servers)
 	cfg.disconnect((leader2 + 2) % servers)
 
@@ -237,6 +250,7 @@ func TestLeaderFailure2B(t *testing.T) {
 	// disconnect the first leader.
 	leader1 := cfg.checkOneLeader()
 	cfg.disconnect(leader1)
+	log.Printf("leader1: %v\n", leader1)
 
 	// the remaining followers should elect
 	// a new leader.
@@ -289,7 +303,6 @@ func TestFailAgree2B(t *testing.T) {
 
 	// re-connect
 	cfg.connect((leader + 1) % servers)
-
 	// the full set of servers should preserve
 	// previous agreements, and be able to agree
 	// on new commands.
@@ -329,6 +342,9 @@ func TestFailNoAgree2B(t *testing.T) {
 	if n > 0 {
 		t.Fatalf("%v committed but no majority", n)
 	}
+	for i := 0; i < len(cfg.rafts); i++ {
+		log.Printf("index: %v, logs: %+v\n", i, cfg.rafts[i].logs)
+	}
 
 	// repair
 	cfg.connect((leader + 1) % servers)
@@ -338,12 +354,17 @@ func TestFailNoAgree2B(t *testing.T) {
 	// the disconnected majority may have chosen a leader from
 	// among their own ranks, forgetting index 2.
 	leader2 := cfg.checkOneLeader()
+	log.Printf("leader2: %v\n", leader2)
 	index2, _, ok2 := cfg.rafts[leader2].Start(30)
 	if ok2 == false {
 		t.Fatalf("leader2 rejected Start()")
 	}
 	if index2 < 2 || index2 > 3 {
 		t.Fatalf("unexpected index %v", index2)
+	}
+	log.Printf("index2: %v\n", index2)
+	for i := 0; i < len(cfg.rafts); i++ {
+		log.Printf("index: %v, logs: %+v\n", i, cfg.rafts[i].logs)
 	}
 
 	cfg.one(1000, servers, true)
@@ -470,16 +491,24 @@ func TestRejoin2B(t *testing.T) {
 	cfg.rafts[leader1].Start(103)
 	cfg.rafts[leader1].Start(104)
 
+	for i := 0; i < len(cfg.rafts); i++ {
+		log.Printf("index: %v, logs: %+v\n", i, cfg.rafts[i].logs)
+	}
 	// new leader commits, also for index=2
 	cfg.one(103, 2, true)
 
+	for i := 0; i < len(cfg.rafts); i++ {
+		log.Printf("index: %v, logs: %+v\n", i, cfg.rafts[i].logs)
+	}
 	// new leader network failure
 	leader2 := cfg.checkOneLeader()
 	cfg.disconnect(leader2)
 
+	log.Printf("connected again")
 	// old leader connected again
 	cfg.connect(leader1)
 
+	log.Printf("connected again")
 	cfg.one(104, 2, true)
 
 	// all together now
